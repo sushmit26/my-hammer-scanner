@@ -1,3 +1,8 @@
+import os
+os.system('pip install shoonya-api-py pyotp')
+
+import streamlit as st
+from NorenRestApiPy.NorenApi import NorenApi
 import streamlit as st
 from NorenRestApiPy.NorenApi import NorenApi
 import pyotp
