@@ -1,5 +1,14 @@
+import subprocess
+import sys
 import os
 os.system('pip install shoonya-api-py pyotp')
+# सिस्टीमला सक्तीने लायब्ररी इन्स्टॉल करायला लावणे
+try:
+    from NorenRestApiPy.NorenApi import NorenApi
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "shoonya-api-py", "pyotp"])
+    from NorenRestApiPy.NorenApi import NorenApi
+   
 
 import streamlit as st
 from NorenRestApiPy.NorenApi import NorenApi
