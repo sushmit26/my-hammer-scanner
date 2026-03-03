@@ -11,7 +11,7 @@ st.title("📈 Nifty 200 Hammer Screener (Multi-Timeframe)")
 st.sidebar.header("Screener Settings")
 
 # Multiplier: Slider ऐवजी Number Input वापरले आहे
-multiplier = st.sidebar.number_input("Shadow Multiplier टाका (उदा. 2.0)", min_value=1.0, max_value=10.0, value=2.5, step=0.1)
+multiplier = st.sidebar.number_input("lower_shadow ही body च्या किती पट मोठी हवी", min_value=1.0, max_value=10.0, value=2.5, step=0.1)
 
 # Timeframe निवडण्यासाठी Dropdown
 timeframe_map = {
