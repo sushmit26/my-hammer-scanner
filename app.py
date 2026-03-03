@@ -1,82 +1,52 @@
-import subprocess
-import sys
-import os
-os.system('pip install shoonya-api-py pyotp')
-# सिस्टीमला सक्तीने लायब्ररी इन्स्टॉल करायला लावणे
-try:
-    from NorenRestApiPy.NorenApi import NorenApi
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "shoonya-api-py", "pyotp"])
-    from NorenRestApiPy.NorenApi import NorenApi
-   
-
 import streamlit as st
-from NorenRestApiPy.NorenApi import NorenApi
-import streamlit as st
-from NorenRestApiPy.NorenApi import NorenApi
-import pyotp
-import time
+import yfinance as yf
+import pandas as pd
 
-# वेबसाईटचे शीर्षक आणि मांडणी
-st.set_page_config(page_title="Hammer Scanner", layout="wide")
-st.title("🏹 Shoonya Hammer Live Scanner")
+# UI सेटिंग्स
+st.set_page_config(page_title="Hammer Screener", layout="wide")
+st.title("🔨 Hammer Candle Stock Screener")
 
-# डाव्या बाजूला लॉगिनसाठी रिकामे बॉक्स (येथे माहिती भरू नका, वेबसाईटवर भरा)
-st.sidebar.header("Login Details")
-user    = st.sidebar.text_input("User ID")
-pwd     = st.sidebar.text_input("Password", type="password")
-vc      = st.sidebar.text_input("Vendor Code")
-apikey  = st.sidebar.text_input("API Key", type="password")
-totp_k  = st.sidebar.text_input("TOTP Key (Alphabetical)", type="password")
+# साइडबार - इनपुट सेटिंग्स
+st.sidebar.header("Settings")
+multiplier = st.sidebar.slider("Shadow Multiplier (Body च्या तुलनेत)", 1.5, 5.0, 2.0)
+history = st.sidebar.selectbox("किती दिवसांचा डेटा हवा?", ["1mo", "3mo", "6mo"])
 
-st.sidebar.divider()
-multiplier = st.sidebar.slider("Hammer Ratio", 1.5, 4.0, 2.0)
+# स्टॉक्सची लिस्ट (तुम्ही यात अजून नावे जोडू शकता)
+nifty_stocks = ["RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS", "TATAMOTORS.NS", "SBIN.NS"]
 
-# Shoonya API क्लास सेटअप
-class ShoonyaApiPy(NorenApi):
-    def __init__(self):
-        NorenApi.__init__(self, host='https://api.shoonya.com/NorenWSTP/', stat_host='https://api.shoonya.com/NorenWSTP/')
+def check_hammer(ticker, mult):
+    try:
+        df = yf.download(ticker, period="5d", interval="1d", progress=False)
+        if df.empty: return None
+        
+        last_row = df.iloc[-1]
+        open_p, close_p, high_p, low_p = last_row['Open'], last_row['Close'], last_row['High'], last_row['Low']
+        
+        body = abs(close_p - open_p)
+        lower_shadow = min(open_p, close_p) - low_p
+        upper_shadow = high_p - max(open_p, close_p)
+        
+        # Hammer Logic: 
+        # 1. Lower Shadow > (Body * Multiplier)
+        # 2. Upper Shadow खूप लहान असावी
+        if lower_shadow > (body * mult) and upper_shadow < (body * 0.5) and body > 0:
+            return True
+        return False
+    except:
+        return None
 
-api = ShoonyaApiPy()
-
-# 'Start Scanner' बटण दाबल्यावर काय व्हावे
-if st.sidebar.button("Start Scanner"):
-    if not all([user, pwd, vc, apikey, totp_k]):
-        st.error("कृपया सर्व लॉगिन डिटेल्स भरा!")
+# मुख्य स्क्रीनवर बटन
+if st.button("स्टॉक्स स्कॅन करा"):
+    st.write(f"स्कॅनिंग सुरू आहे... (Multiplier: {multiplier}x)")
+    found_stocks = []
+    
+    for stock in nifty_stocks:
+        if check_hammer(stock, multiplier):
+            found_stocks.append(stock)
+            
+    if found_stocks:
+        st.success(f"खालील स्टॉक्समध्ये Hammer पॅटर्न दिसला आहे:")
+        for s in found_stocks:
+            st.write(f"✅ **{s}**")
     else:
-        try:
-            # TOTP जनरेट करणे
-            totp = pyotp.TOTP(totp_k).now()
-            
-            # लॉगिन प्रोसेस
-            ret = api.login(userid=user, password=pwd, twoFA=totp, vendor_code=vc, api_key=apikey, imei='abc1234')
-            
-            if ret and ret['stat'] == 'Ok':
-                st.success("✅ Shoonya शी कनेक्शन यशस्वी!")
-                placeholder = st.empty()
-                
-                # लाइव्ह स्कॅनिंग लूप
-                while True:
-                    # Nifty 50 (Token: 26000) चा ५ मिनिटांचा डेटा मिळवणे
-                    last_candle = api.get_time_price_series(exchange='NSE', token='26000', interval=5)
-                    
-                    if last_candle and len(last_candle) > 0:
-                        c = last_candle[0]
-                        o, h, l, close = float(c['into']), float(c['inth']), float(c['intl']), float(c['inc'])
-                        
-                        # हॅमर कॅन्डलचे लॉजिक
-                        body = abs(o - close)
-                        lower_shadow = min(o, close) - l
-                        upper_shadow = h - max(o, close)
-                        
-                        if body > 0 and lower_shadow >= (multiplier * body) and upper_shadow < (body * 0.5):
-                            placeholder.warning(f"🚨 ALERT: Hammer Found! Price: {close}")
-                            st.balloons()
-                        else:
-                            placeholder.info(f"स्कॅनिंग सुरू आहे... सध्याची किंमत: {close}")
-                    
-                    time.sleep(60) # दर १ मिनिटाने डेटा अपडेट होईल
-            else:
-                st.error(f"लॉगिन अयशस्वी: {ret.get('emsg', 'Unknown Error')}")
-        except Exception as e:
-            st.error(f"Error: {e}")
+        st.info("सध्या कोणत्याही स्टॉकमध्ये असा पॅटर्न नाही.")
