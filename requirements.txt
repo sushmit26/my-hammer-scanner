@@ -1,3 +1,3 @@
 streamlit
-shoonya-api-py
-pyotp
+yfinance
+pandas
