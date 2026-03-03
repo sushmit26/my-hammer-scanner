@@ -6,7 +6,7 @@ st.set_page_config(page_title="Stable Nifty 500 Screener", layout="wide")
 st.title("🚀 High-Stability Hammer Screener")
 
 # साइडबार इनपुट
-multiplier = st.sidebar.number_input("Shadow Multiplier", min_value=1.0, value=2.5, step=0.1)
+multiplier = st.sidebar.number_input("lower shadow ही body च्या किती पट हवी", min_value=1.0, value=2.5, step=0.1)
 selected_tf = st.sidebar.selectbox("Timeframe", ["1 Hour","3 Hour","4 Hour", "1 Day", "1 Week","1 Month"])
 
 # Nifty 500 लिस्ट (येथे ५०० स्टॉक्सची नावे असतील)
@@ -60,7 +60,7 @@ tickers =[
     "WELCORP.NS", "WELSPUNLIV.NS", "WESTLIFE.NS", "WHIRLPOOL.NS", "WIPRO.NS", "YESBANK.NS", "ZEEENT.NS", "ZENSARTECH.NS", "ZOMATO.NS", "ZYDUSLIFE.NS"]
 
 if st.button("स्कॅन सुरू करा"):
-    with st.spinner('डेटा गोळा करत आहे... कृपया थांबा...'):
+    with st.spinner('डेटा load होत आहे... कृपया थांबा...'):
         # १. सर्व ५०० स्टॉक्सचा डेटा एकाच वेळी डाऊनलोड करा (ही सर्वात महत्त्वाची स्टेप आहे)
         # यामुळे Yahoo Finance तुम्हाला ब्लॉक करण्याची शक्यता खूप कमी होते.
         all_data = yf.download(tickers, period="5d", interval="60m" if "Hour" in selected_tf else "1d", group_by='ticker', progress=False)
