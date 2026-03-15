@@ -1,14 +1,22 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor
 
-st.title("🎯 Precision Hammer Screener (Chartink Version)")
+st.set_page_config(page_title="Final Screener", layout="wide")
+st.title("🎯 Precise Stock Screener")
 
-# इमेजमधील तंतोतंत निकष
-multiplier = 2 # इमेजमध्ये 'Number 2' आहे
-upper_shadow_pct = 0.25 # इमेजमध्ये 'Number 0.25' आहे
+# १. ऑप्शन्स आता थेट स्क्रीनवर दिसतील (Sidebar नाही)
+col1, col2 = st.columns(2)
+with col1:
+    multiplier = st.number_input("Shadow Multiplier (इमेजमधील Number 2)", min_value=1.0, value=2.0, step=0.1)
+with col2:
+    selected_tf = st.selectbox("Timeframe निवडा (RKFORGE साठी 1 Week निवडा)", ["1 Week", "1 Day", "1 Hour"])
 
-# तुमची पूर्ण ५०० ची लिस्ट
+# २. टाइमफ्रेम मॅपिंग
+tf_map = {"1 Week": "1wk", "1 Day": "1d", "1 Hour": "60m"}
+
+# ३. निफ्टी ५०० पूर्ण लिस्ट (तुमच्याकडे असलेली पूर्ण लिस्ट इथे पेस्ट करा)
 tickers =[
     "360ONE.NS", "3MINDIA.NS", "ABB.NS", "ACC.NS", "AIAENG.NS", "APLAPOLLO.NS", "AUBANK.NS", "AADHARHFC.NS", "AARTIIND.NS", "AAVAS.NS", 
     "ABBOTINDIA.NS", "ACE.NS", "ADANIENSOL.NS", "ADANIENT.NS", "ADANIGREEN.NS", "ADANIPORTS.NS", "ADANIPOWER.NS", "ADANITOTALGAS.NS", "AWL.NS", "ADEPRO.NS", 
@@ -58,46 +66,42 @@ tickers =[
     "VAIBHAVGBL.NS", "VAKRANGEE.NS", "VALIANTORG.NS", "VARDHMAN.NS", "VARROC.NS", "VBL.NS", "VEDL.NS", "VENKEYS.NS", "VINATIORGA.NS", "VOLTAS.NS", 
     "WELCORP.NS", "WELSPUNLIV.NS", "WESTLIFE.NS", "WHIRLPOOL.NS", "WIPRO.NS", "YESBANK.NS", "ZEEENT.NS", "ZENSARTECH.NS", "ZOMATO.NS", "ZYDUSLIFE.NS"]
 
-def precise_scan():
-    found = []
-    # ५०० स्टॉक्ससाठी आपण 'Batch Download' वापरूया (सर्वात सुरक्षित पद्धत)
-    # Weekly डेटासाठी किमान १ महिन्याचा डेटा मागवूया
-    data = yf.download(tickers, period="3mo", interval="1wk", group_by='ticker', progress=False)
-    
-    for ticker in tickers:
-        try:
-            df = data[ticker].dropna()
-            if df.empty: continue
-            
-            # शेवटची कॅन्डल
-            last = df.iloc[-1]
-            o, h, l, c = float(last['Open']), float(last['High']), float(last['Low']), float(last['Close'])
-            
-            # --- IMAGE BASED MATH ---
-            body = abs(c - o)
-            if body == 0: body = 0.01
-            
-            # १. (Open - Low) >= (Body * 2)
-            cond1 = (o - l) >= (body * multiplier)
-            
-            # २. (High - Close) <= (Total Range * 0.25)
-            cond2 = (h - c) <= ((h - l) * upper_shadow_pct)
-            
-            # ३. Close > Open
-            cond3 = c > o
-            
-            # ४. Close > 500
-            cond4 = c > 500
-            
-            if cond1 and cond2 and cond3 and cond4:
-                found.append({"Stock": ticker, "LTP": c})
-        except:
-            continue
-    return found
+def check_logic(ticker):
+    try:
+        # डेटा डाऊनलोड
+        df = yf.download(ticker, period="2y", interval=tf_map[selected_tf], progress=False)
+        if df.empty or len(df) < 1: return None
+        
+        last = df.iloc[-1]
+        o, h, l, c = float(last['Open']), float(last['High']), float(last['Low']), float(last['Close'])
+        
+        body = abs(c - o)
+        if body == 0: body = 0.01
+        
+        # --- इमेजमधील तंतोतंत कंडिशन्स ---
+        cond1 = (o - l) >= (body * multiplier)             # Shadow >= Body * 2
+        cond2 = (h - c) <= ((h - l) * 0.25)                # Upper Shadow <= 25% of Range
+        cond3 = c > o                                      # Bullish Candle
+        cond4 = c > 500                                    # Price > 500
+        
+        if cond1 and cond2 and cond3 and cond4:
+            return {"Stock": ticker, "LTP": round(c, 2), "Status": "PASS"}
+        return None
+    except:
+        return None
 
-if st.button("आताच अचूक स्कॅन करा"):
-    results = precise_scan()
-    if results:
-        st.write(pd.DataFrame(results))
+# ४. स्कॅनिंग बटन
+if st.button("🚀 स्टॉक स्कॅन करा"):
+    with st.spinner('तपासत आहे...'):
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = list(executor.map(check_logic, tickers))
+            
+    found = [r for r in results if r is not None]
+    
+    if found:
+        st.success(f"{len(found)} स्टॉक्स सापडले!")
+        st.dataframe(pd.DataFrame(found), use_container_width=True)
     else:
-        st.error("अजूनही निकाल मिळत नाहीयेत. याचा अर्थ yfinance चा Weekly Open आणि Chartink चा Weekly Open मॅच होत नाहीये.")
+        st.error("निकषात एकही स्टॉक बसला नाही. कृपया Multiplier कमी करा किंवा Timeframe बदला.")
+
+st.info("टीप: जर RKFORGE दिसत नसेल, तर याचा अर्थ yfinance कडील 'Weekly Open' भाव तुमच्या चार्टइंक पेक्षा वेगळा आहे.")
