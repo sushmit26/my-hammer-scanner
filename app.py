@@ -1,20 +1,14 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-from concurrent.futures import ThreadPoolExecutor
 
-st.set_page_config(page_title="Correct Hammer Screener", layout="wide")
-st.title("🎯 Exact Chartink Hammer Screener")
+st.title("🎯 Precision Hammer Screener (Chartink Version)")
 
-# साइडबार सेटिंग्ज
-multiplier = st.sidebar.number_input("Shadow Multiplier (Number 2)", min_value=1.0, value=2.0, step=0.1)
-# इमेजमध्ये Weekly आहे म्हणून 1wk निवडले आहे
-selected_tf = st.sidebar.selectbox("Timeframe (Chartink प्रमाणे निवडा)", ["1 Week", "1 Day", "1 Hour"])
+# इमेजमधील तंतोतंत निकष
+multiplier = 2 # इमेजमध्ये 'Number 2' आहे
+upper_shadow_pct = 0.25 # इमेजमध्ये 'Number 0.25' आहे
 
-tf_map = {"1 Week": "1wk", "1 Day": "1d", "1 Hour": "60m"}
-period_map = {"1 Week": "5y", "1 Day": "2y", "1 Hour": "2y"}
-
-# तुमची पूर्ण ५०० स्टॉक्सची लिस्ट इथे ठेवा
+# तुमची पूर्ण ५०० ची लिस्ट
 tickers =[
     "360ONE.NS", "3MINDIA.NS", "ABB.NS", "ACC.NS", "AIAENG.NS", "APLAPOLLO.NS", "AUBANK.NS", "AADHARHFC.NS", "AARTIIND.NS", "AAVAS.NS", 
     "ABBOTINDIA.NS", "ACE.NS", "ADANIENSOL.NS", "ADANIENT.NS", "ADANIGREEN.NS", "ADANIPORTS.NS", "ADANIPOWER.NS", "ADANITOTALGAS.NS", "AWL.NS", "ADEPRO.NS", 
@@ -64,67 +58,46 @@ tickers =[
     "VAIBHAVGBL.NS", "VAKRANGEE.NS", "VALIANTORG.NS", "VARDHMAN.NS", "VARROC.NS", "VBL.NS", "VEDL.NS", "VENKEYS.NS", "VINATIORGA.NS", "VOLTAS.NS", 
     "WELCORP.NS", "WELSPUNLIV.NS", "WESTLIFE.NS", "WHIRLPOOL.NS", "WIPRO.NS", "YESBANK.NS", "ZEEENT.NS", "ZENSARTECH.NS", "ZOMATO.NS", "ZYDUSLIFE.NS"]
 
-def check_hammer_perfect(ticker):
-    try:
-        # डेटा डाऊनलोड करताना 'auto_adjust=False' ठेवणे गरजेचे आहे जेणेकरून 'Open' बदलणार नाही
-        df = yf.download(ticker, period=period_map[selected_tf], interval=tf_map[selected_tf], progress=False, auto_adjust=False)
-        
-        if df.empty or len(df) < 2:
-            return None
-        
-        # शेवटची पूर्ण झालेली कॅन्डल (Current Bar)
-        last = df.iloc[-1]
-        o = float(last['Open'])
-        h = float(last['High'])
-        l = float(last['Low'])
-        c = float(last['Close'])
-        
-        # --- तुमची इमेजमधील तंतोतंत कंडिशन ---
-        
-        body = abs(c - o)
-        if body == 0: body = 0.01 # Division error टाळण्यासाठी
-        
-        # १. (Open - Low) >= (Close - Open) * 2 [इमेजमधील पहिली ओळ]
-        cond1 = (o - l) >= (body * multiplier)
-        
-        # २. (High - Close) <= (High - Low) * 0.25 [इमेजमधील दुसरी ओळ]
-        cond2 = (h - max(o, c)) <= ((h - l) * 0.25)
-        
-        # ३. Close > Open [इमेजमधील तिसरी ओळ - Bullish Hammer]
-        cond3 = c > o
-        
-        # ४. Close > 500 [इमेजमधील चौथी ओळ]
-        cond4 = c > 500
-        
-        # सर्व अटी पूर्ण झाल्या तरच रिझल्ट दाखवा
-        if cond1 and cond2 and cond3 and cond4:
-            return {
-                "Stock Symbol": ticker,
-                "LTP": round(c, 2),
-                "Open": round(o, 2),
-                "High": round(h, 2),
-                "Low": round(l, 2),
-                "View Chart": f"https://www.tradingview.com/chart/?symbol=NSE:{ticker.replace('.NS','')}"
-            }
-        return None
-    except:
-        return None
+def precise_scan():
+    found = []
+    # ५०० स्टॉक्ससाठी आपण 'Batch Download' वापरूया (सर्वात सुरक्षित पद्धत)
+    # Weekly डेटासाठी किमान १ महिन्याचा डेटा मागवूया
+    data = yf.download(tickers, period="3mo", interval="1wk", group_by='ticker', progress=False)
+    
+    for ticker in tickers:
+        try:
+            df = data[ticker].dropna()
+            if df.empty: continue
+            
+            # शेवटची कॅन्डल
+            last = df.iloc[-1]
+            o, h, l, c = float(last['Open']), float(last['High']), float(last['Low']), float(last['Close'])
+            
+            # --- IMAGE BASED MATH ---
+            body = abs(c - o)
+            if body == 0: body = 0.01
+            
+            # १. (Open - Low) >= (Body * 2)
+            cond1 = (o - l) >= (body * multiplier)
+            
+            # २. (High - Close) <= (Total Range * 0.25)
+            cond2 = (h - c) <= ((h - l) * upper_shadow_pct)
+            
+            # ३. Close > Open
+            cond3 = c > o
+            
+            # ४. Close > 500
+            cond4 = c > 500
+            
+            if cond1 and cond2 and cond3 and cond4:
+                found.append({"Stock": ticker, "LTP": c})
+        except:
+            continue
+    return found
 
-if st.button("🚀 अचूक स्कॅन सुरू करा"):
-    st.info(f"स्कॅनिंग सुरू झाले आहे. {selected_tf} डेटा तपासला जात आहे...")
-    
-    with ThreadPoolExecutor(max_workers=15) as executor:
-        results = list(executor.map(check_hammer_perfect, tickers))
-    
-    found = [res for res in results if res is not None]
-    
-    if found:
-        st.success(f"सापडले! {len(found)} स्टॉक्स तुमच्या अटीत बसले आहेत.")
-        df_final = pd.DataFrame(found)
-        st.data_editor(
-            df_final,
-            column_config={"View Chart": st.column_config.LinkColumn()},
-            hide_index=True
-        )
+if st.button("आताच अचूक स्कॅन करा"):
+    results = precise_scan()
+    if results:
+        st.write(pd.DataFrame(results))
     else:
-        st.warning(f"सध्या {selected_tf} मध्ये या अटीत कोणताही स्टॉक बसत नाही. (जर RKFORGE चार्टवर हॅमर दिसत असेल, तर टाइमफ्रेम तपासा).")
+        st.error("अजूनही निकाल मिळत नाहीयेत. याचा अर्थ yfinance चा Weekly Open आणि Chartink चा Weekly Open मॅच होत नाहीये.")
