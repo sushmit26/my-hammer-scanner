@@ -3,17 +3,18 @@ import yfinance as yf
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 
-st.set_page_config(page_title="Nifty 500 Chartink Style", layout="wide")
-st.title("📈 Nifty 500 Hammer (As per Chartink Logic)")
+st.set_page_config(page_title="Correct Hammer Screener", layout="wide")
+st.title("🎯 Exact Chartink Hammer Screener")
 
-# १. युजर इनपुट - इमेजमध्ये मल्टिप्लायर २ आहे
-multiplier = st.sidebar.number_input("Shadow Multiplier (Body * n)", min_value=1.0, value=2.0, step=0.1)
+# साइडबार सेटिंग्ज
+multiplier = st.sidebar.number_input("Shadow Multiplier (Number 2)", min_value=1.0, value=2.0, step=0.1)
+# इमेजमध्ये Weekly आहे म्हणून 1wk निवडले आहे
+selected_tf = st.sidebar.selectbox("Timeframe (Chartink प्रमाणे निवडा)", ["1 Week", "1 Day", "1 Hour"])
 
-# इमेजमध्ये सर्व 'Weekly' अटी आहेत, त्यामुळे डिफॉल्ट 1 Week ठेवूया
-selected_tf = st.sidebar.selectbox("Timeframe निवडा", ["1 Week", "1 Day", "1 Hour"])
 tf_map = {"1 Week": "1wk", "1 Day": "1d", "1 Hour": "60m"}
+period_map = {"1 Week": "5y", "1 Day": "2y", "1 Hour": "2y"}
 
-# २. टिकर्स लिस्ट (नमुना - पूर्ण ५०० वापरा)
+# तुमची पूर्ण ५०० स्टॉक्सची लिस्ट इथे ठेवा
 tickers =[
     "360ONE.NS", "3MINDIA.NS", "ABB.NS", "ACC.NS", "AIAENG.NS", "APLAPOLLO.NS", "AUBANK.NS", "AADHARHFC.NS", "AARTIIND.NS", "AAVAS.NS", 
     "ABBOTINDIA.NS", "ACE.NS", "ADANIENSOL.NS", "ADANIENT.NS", "ADANIGREEN.NS", "ADANIPORTS.NS", "ADANIPOWER.NS", "ADANITOTALGAS.NS", "AWL.NS", "ADEPRO.NS", 
@@ -63,48 +64,67 @@ tickers =[
     "VAIBHAVGBL.NS", "VAKRANGEE.NS", "VALIANTORG.NS", "VARDHMAN.NS", "VARROC.NS", "VBL.NS", "VEDL.NS", "VENKEYS.NS", "VINATIORGA.NS", "VOLTAS.NS", 
     "WELCORP.NS", "WELSPUNLIV.NS", "WESTLIFE.NS", "WHIRLPOOL.NS", "WIPRO.NS", "YESBANK.NS", "ZEEENT.NS", "ZENSARTECH.NS", "ZOMATO.NS", "ZYDUSLIFE.NS"]
 
-def check_hammer_chartink(ticker):
+def check_hammer_perfect(ticker):
     try:
-        # डेटा डाऊनलोड (Weekly साठी किमान ३-४ आठवड्यांचा डेटा हवा)
-        df = yf.download(ticker, period="max" if "Week" in selected_tf else "1mo", 
-                         interval=tf_map[selected_tf], progress=False)
+        # डेटा डाऊनलोड करताना 'auto_adjust=False' ठेवणे गरजेचे आहे जेणेकरून 'Open' बदलणार नाही
+        df = yf.download(ticker, period=period_map[selected_tf], interval=tf_map[selected_tf], progress=False, auto_adjust=False)
         
-        if df.empty or len(df) < 2: return None
+        if df.empty or len(df) < 2:
+            return None
         
-        # शेवटची पूर्ण झालेली कॅन्डल घेणे (Current Live Candle कधीकधी अपूर्ण असते)
-        last = df.iloc[-1] 
-        o, h, l, c = float(last['Open']), float(last['High']), float(last['Low']), float(last['Close'])
+        # शेवटची पूर्ण झालेली कॅन्डल (Current Bar)
+        last = df.iloc[-1]
+        o = float(last['Open'])
+        h = float(last['High'])
+        l = float(last['Low'])
+        c = float(last['Close'])
+        
+        # --- तुमची इमेजमधील तंतोतंत कंडिशन ---
         
         body = abs(c - o)
-        if body == 0: body = 0.01
+        if body == 0: body = 0.01 # Division error टाळण्यासाठी
         
-        # --- IMAGE LOGIC START ---
-        # Cond 1: (Open - Low) >= (Close - Open) * 2
+        # १. (Open - Low) >= (Close - Open) * 2 [इमेजमधील पहिली ओळ]
         cond1 = (o - l) >= (body * multiplier)
         
-        # Cond 2: (High - Close) <= (High - Low) * 0.25
+        # २. (High - Close) <= (High - Low) * 0.25 [इमेजमधील दुसरी ओळ]
         cond2 = (h - max(o, c)) <= ((h - l) * 0.25)
         
-        # Cond 3: Close > Open (Bullish)
+        # ३. Close > Open [इमेजमधील तिसरी ओळ - Bullish Hammer]
         cond3 = c > o
         
-        # Cond 4: Close > 500 (इमेजमधील अट)
+        # ४. Close > 500 [इमेजमधील चौथी ओळ]
         cond4 = c > 500
-        # --- IMAGE LOGIC END ---
-
+        
+        # सर्व अटी पूर्ण झाल्या तरच रिझल्ट दाखवा
         if cond1 and cond2 and cond3 and cond4:
-            return {"Stock": ticker, "LTP": round(c, 2), "View": f"https://www.tradingview.com/chart/?symbol=NSE:{ticker.replace('.NS','')}"}
+            return {
+                "Stock Symbol": ticker,
+                "LTP": round(c, 2),
+                "Open": round(o, 2),
+                "High": round(h, 2),
+                "Low": round(l, 2),
+                "View Chart": f"https://www.tradingview.com/chart/?symbol=NSE:{ticker.replace('.NS','')}"
+            }
         return None
     except:
         return None
 
-if st.button("🔍 Chartink लॉजिकनुसार स्कॅन करा"):
-    with ThreadPoolExecutor(max_workers=20) as executor:
-        results = list(executor.map(check_hammer_chartink, tickers))
+if st.button("🚀 अचूक स्कॅन सुरू करा"):
+    st.info(f"स्कॅनिंग सुरू झाले आहे. {selected_tf} डेटा तपासला जात आहे...")
     
-    found = [r for r in results if r is not None]
+    with ThreadPoolExecutor(max_workers=15) as executor:
+        results = list(executor.map(check_hammer_perfect, tickers))
+    
+    found = [res for res in results if res is not None]
+    
     if found:
-        st.success(f"{len(found)} स्टॉक्स सापडले!")
-        st.table(pd.DataFrame(found))
+        st.success(f"सापडले! {len(found)} स्टॉक्स तुमच्या अटीत बसले आहेत.")
+        df_final = pd.DataFrame(found)
+        st.data_editor(
+            df_final,
+            column_config={"View Chart": st.column_config.LinkColumn()},
+            hide_index=True
+        )
     else:
-        st.warning("कोणताही स्टॉक सापडला नाही. कृपया Timeframe '1 Week' निवडून पहा.")
+        st.warning(f"सध्या {selected_tf} मध्ये या अटीत कोणताही स्टॉक बसत नाही. (जर RKFORGE चार्टवर हॅमर दिसत असेल, तर टाइमफ्रेम तपासा).")
